@@ -1,0 +1,118 @@
+﻿
+@{
+    ViewBag.Title = "New Rental Form";    
+}
+
+<h2>New Rental Form</h2>
+
+<form id="newRental">
+    <div class="form-group">
+        <label>Customer</label>
+        <div class="tt-container">
+            <input id="customer" name="customer" type="text" value="" class="form-control" required data-rule-validCustomer="true" />
+        </div>        
+    </div>
+    <div class="form-group">
+        <label>Movie</label>
+        <div class="tt-container">
+            <input id="movie" name="movie" type="text" value="" class="form-control" data-rule-atLeastOneMovie="true" />
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <ul id="movies" class="list-group"></ul>
+        </div>
+    </div>    
+
+    <button class="btn btn-primary">Submit</button>
+</form>
+
+@section scripts
+{
+    @Scripts.Render("~/bundles/jqueryval")
+    <script>
+        $(document).ready(function () {
+            var vm = {
+                movieIds: []
+            };
+
+            var customers = new Bloodhound({
+                datumTokenizer: Bloodhound.tokenizers.obj.whitespace('name'),               //Especifica que propiedad del objeto que vamos a recibir se esta usando para buscar
+                queryTokenizer: Bloodhound.tokenizers.whitespace,                
+                remote: {
+                    url: '/api/customers?query=%QUERY',                                     //Direccion de donde se va a obtener la información, el parámetro %QUERY hace referencia al wildcard
+                    wildcard: '%QUERY'                                                      //que en resumen, permite la busqueda
+                }
+            });           
+
+            $('#customer').typeahead({                                                      //Busca al textbox al que queremos aplicar typeahead
+                minLength: 3,                                                               //Configura que se daran opciones una vez que se ingresen al minimo 3 caracteres
+                highlight: true                                                             //Los caracteres que sean iguales a los que ingresamos van a ser resaltados
+            }, {
+                name: 'customers',
+                display: 'name',
+                source: customers
+            }).on("typeahead:select", function (e, customer) {                              //Configura que cuando se seleccione un objeto de la lista se haga algo
+                vm.customerId = customer.id;                                                //Guarda el id del objeto seleccionado en un viewModel del cliente                                
+            });
+
+            var movies = new Bloodhound({
+                datumTokenizer: Bloodhound.tokenizers.obj.whitespace('name'),
+                queryTokenizer: Bloodhound.tokenizers.whitespace,
+                remote: {
+                    url: '/api/movies?query=%QUERY',
+                    wildcard: '%QUERY'
+                }
+            });           
+
+            $('#movie').typeahead({
+                minLength: 1,
+                highlight: true
+            }, {
+                name: 'movies',
+                display: 'name',
+                source: movies
+            }).on("typeahead:select", function (e, movie) {
+                $('#movies').append("<li class='list-group-item'>" + movie.name + "</li>");                        
+                $('#movie').typeahead("val", "");
+                vm.movieIds.push(movie.id);                
+            });
+
+            $.validator.addMethod("validCustomer", function () {                            //Validación personalizada que valida que el customer sea válido
+                return vm.customerId && vm.customerId !== 0;                                
+            }, "Please select a valid customer.");                                          //Mensaje para cuando no se cumple la validación
+
+            $.validator.addMethod("atLeastOneMovie", function () {
+                return vm.movieIds.length > 0;
+            }, "Please select at least one movie.");
+
+            var validator = $("#newRental").validate({                                      //Activa las validaciones JQuery en ese formulario
+                submitHandler: function () {                                                //Incluye un handler para cuando se hace submit
+                    $.ajax({                                                                //Llamada AJAX para hacer POST con el formulario
+                        url: "/api/Rentals",
+                        method: "POST",
+                        data: vm
+                    })
+                    .done(function () {                                                     //Funcion que sucede cuando la llamada AJAX fue exitosa
+                        toastr.success("Rentals succefully recorded");
+
+                        $("#customer").typeahead("val", "");                                //Resetea los controles
+                        $("#movie").typeahead("val", "");
+                        $("#movies").empty();                                               //Vacia la lista de peliculas
+
+                        vm = { movieIds: [] };                                              //Vacia el viewModel
+
+                        validator.resetForm();                                              //Resetea las validaciones del formulario
+                    })
+                    .fail(function () {
+                        toastr.error("Something unexpected happened");                      //Funcion que sucede cuando la llamada AJAX falla
+                    });
+
+                    return false;                                                           //Prevee que la página haga un postback, mismo funcionamiento que 'e.preventDefault()'
+                }
+            });
+        });
+    </script>    
+}
+
